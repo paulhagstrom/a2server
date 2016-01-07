@@ -45,16 +45,25 @@ fi
 
 echo "A2SERVER: Installing A2SERVER tools..."
 
-if ! command -v nulib2 > /dev/null; then
+# delete older nulib2 which doesn't correctly handle zero-length forks in GSHK-created archives
+if hash nulib2 &> /dev/null; then
+    nulib2version=$(nulib2 | sed -n 2p | sed 's|^.*v\([0-9]\)\.\([0-9]\)\.\([0-9]\).*$|\1\2\3|' 2> /dev/null)
+    if (( $nulib2version < 310 )); then
+        sudo apt-get -y purge nulib2 &> /dev/null
+        sudo rm $(command -v nulib2) &> /dev/null
+    fi
+fi
+
+if ! hash nulib2 &> /dev/null; then
 
     echo "A2SERVER: Installing nulib2..."
 
     cd /tmp
-    if [[ $arch ]]; then
-        { wget -qO- "${binaryURL}precompiled/nulib2-${arch}.tgz" | sudo tar Pzx; } &> /dev/null
+    if [[ $arch && ! -f /tmp/a2server-compileAlways ]]; then
+        { wget -qO- "${binaryURL}precompiled/nulib2-3.1.0a1-${arch}.tgz" | sudo tar Pzx; } &> /dev/null
     fi
-
-    if ! command -v nulib2 > /dev/null; then
+        
+    if ! hash nulib2 &> /dev/null; then
 
         if [[ ! -f /tmp/a2server-packageReposUpdated ]]; then
             # prepare for installing packages
@@ -67,27 +76,30 @@ if ! command -v nulib2 > /dev/null; then
         sudo apt-get -y clean
 
         cd /tmp
-        rm -rf /tmp/nulib &> /dev/null
-        mkdir /tmp/nulib
-        cd /tmp/nulib
+        rm -rf /tmp/nulib2 &> /dev/null
+        mkdir /tmp/nulib2
+        cd /tmp/nulib2
         if [[ $useExternalURL ]]; then
-            wget -q -O nulibdist.tar.gz http://web.archive.org/web/20131031160750/http://www.nulib.com/downloads/nulibdist.tar.gz
-            tar zxf nulibdist.tar.gz &> /dev/null
+            wget -q -O nulib2-3.1.0a1.zip "https://github.com/fadden/nulib2/archive/51af83986cd5798daa7e0d82a161c9d3963c72bc.zip"
+            unzip nulib2-3.1.0a1.zip 2> /dev/null
+            rm nulib2-3.1.0a1.zip &> /dev/null
         fi
-        if [[ ! -d nulib2-220 ]]; then
-            wget -q -O nulibdist.tar.gz ${binaryURL}external/source/nulibdist.tar.gz
-            tar zxf nulibdist.tar.gz &> /dev/null
+        if [ ! -d nulib2* ]; then
+            wget -q -O nulib2-3.1.0a1.zip "${binaryURL}external/source/nulib2-3.1.0a1.zip"
+            unzip nulib2-3.1.0a1.zip 2> /dev/null
+            rm nulib2-3.1.0a1.zip &> /dev/null
         fi
-        cd nufxlib*
+        cd nulib2*
+        cd nufxlib
         ./configure
         make
         sudo make install
-        cd ../nulib2*
+        cd ../nulib2
         ./configure
         make
         sudo make install
         cd
-        rm -rf /tmp/nulib
+        rm -rf /tmp/nulib2
     fi
 
 else
@@ -97,7 +109,7 @@ fi
 # download and install The Unarchiver, for expanding Apple disk images
 # http://wakaba.c3.cx/s/apps/unarchiver.html
 
-if ! command -v unar > /dev/null; then
+if ! hash unar &> /dev/null; then
 
     echo "A2SERVER: Installing The Unarchiver..."
 
@@ -113,8 +125,8 @@ if ! command -v unar > /dev/null; then
         sudo apt-get clean
     fi
     
-    if ! command -v unar > /dev/null; then
-        if [[ $arch ]]; then
+    if ! hash unar &> /dev/null; then
+        if [[ $arch && ! -f /tmp/a2server-compileAlways ]]; then
             # Dependencies: for unar
             sudo apt-get -y install libgnustep-base1.22
             sudo apt-get clean
@@ -122,7 +134,7 @@ if ! command -v unar > /dev/null; then
         fi
 
         # If all else fails, compile from source.
-        if ! command -v unar >/dev/null; then
+        if ! hash unar &> /dev/null; then
 
             # Dependencies: build-deps for unar
             sudo apt-get -y install build-essential libgnustep-base-dev libz-dev libbz2-dev libssl-dev libicu-dev unzip
@@ -132,12 +144,12 @@ if ! command -v unar > /dev/null; then
             mkdir /tmp/unar
             cd /tmp/unar
             if [[ $useExternalURL ]]; then
-                wget -O unar_1.8.zip https://github.com/incbee/Unarchiver/archive/unar-1.8.zip
-                unzip -o unar_1.8.zip &> /dev/null
+                wget -O unar-1.8.1.zip https://github.com/incbee/Unarchiver/archive/unar-1.8.1.zip
+                unzip -o unar-1.8.1.zip &> /dev/null
             fi
             if [ ! -d *Unarchiver*/XADMaster ]; then # need single bracket for glob
-                wget -O unar_1.8.zip ${binaryURL}external/source/unar-1.8.zip
-                unzip -o unar_1.8.zip &> /dev/null
+                wget -O unar-1.8.1.zip ${binaryURL}external/source/unar-1.8.1.zip
+                unzip -o unar-1.8.1.zip &> /dev/null
             fi
             cd *Unarchiver*/XADMaster
             make -f Makefile.linux
@@ -153,7 +165,7 @@ else
     echo "A2SERVER: The Unarchiver has already been installed."
 fi
 
-if ! command -v unzip >/dev/null; then
+if ! hash unzip &> /dev/null; then
     echo "A2SERVER: Installing unzip..."
     if [[ ! -f /tmp/a2server-packageReposUpdated ]]; then
         # prepare for installing packages

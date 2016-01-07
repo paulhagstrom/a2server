@@ -9,7 +9,7 @@
 # to download and execute, type:
 # wget ivanx.com/a2server/setup; source setup
 
-a2serverVersion="129d1"
+a2serverVersion="130"
 
 # Ensure URL we'll use ends in a /
 case "$A2SERVER_SCRIPT_URL" in
@@ -43,6 +43,7 @@ skipRepoUpdate=
 autoAnswerYes=
 setupNetBoot=
 setupWindowsSharing=
+compileAlways=
 updateRasppleII=
 rm /tmp/a2server-* 2> /dev/null
 while [[ $1 ]]; do
@@ -62,6 +63,10 @@ while [[ $1 ]]; do
         shift
         setupWindowsSharing="-w"
         touch /tmp/a2server-setupWindowsSharing
+    elif [[ $1 == "-c" ]]; then
+        shift
+        compileAlways="-c"
+        touch /tmp/a2server-compileAlways
     elif [[ $1 == "-os" || $1 == "os" ]]; then
         # elif [[ ${1,,} == "rasppleii" || ${1,,} == "raspple" || ${1,,} == "rasappleii" || ${1,,} == "rasapple" || ${1,,} == "raspple2" || ${1,,} == "rasapple2" ]]; then
         shift
@@ -80,6 +85,7 @@ while [[ $1 ]]; do
         echo "-r: don't update package repositories"
         echo "-b: auto-setup network boot (use with -y)"
         echo "-w: auto-setup Windows file sharing (use with -y)"
+        echo "-c: compile non-package items, rather than downloading binaries"
         if [[ $isRpi ]]; then
             echo "-os: update Raspbian OS, A2CLOUD, A2SERVER, and Apple II Pi"
         fi
@@ -110,7 +116,8 @@ if [[ $isRpi ]]; then #supported Raspbian? (16-Feb-15, 20-Jun-14, 09-Jan-14, etc
     fwhash=$(zcat /usr/share/doc/raspberrypi-bootloader/changelog.Debian.gz | grep -m 1 'as of' | awk '{print $NF}')
     fwsupported="-8aca5762- -462f3e3f476f7b6- -c32bc633039cd9- -9d34d0475f9-
             -d4f5315cfac4e- -6f4a90c8cb8817f- -5dd9b4962e- -17c8799375-
-            -960832a6c2590635216c296b6ee0bebf67b21d50-"
+            -960832a6c2590635216c296b6ee0bebf67b21d50-
+            -2a329e0c7d8ea19c085bac5633aa4fccee0f21be-"
     [[ "$fwsupported" == *-$fwhash-* ]] && unsupportedOS=
     # [[ ($fwhash == "8aca5762") || ($fwhash == "462f3e3f476f7b6") || ($fwhash == "c32bc633039cd9") || ($fwhash == "9d34d0475f9") || ($fwhash == "d4f5315cfac4e") || ($fwhash == "6f4a90c8cb8817f") || ($fwhash == "5dd9b4962e") || ($fwhash == "17c8799375") ]] && unsupportedOS=
 elif [[ $isDebian ]]; then # supported Debian?
@@ -181,7 +188,7 @@ if (( $doSetup )); then
             if [[ ! $autoAnswerYes ]]; then
                 echo
                 echo "To ensure that all client computers are able to connect to"
-                echo "${a2server} using the same password, you are recommended"
+                echo "${a2server} using the same password, you probably want"
                 echo "to change your user password to 'apple2'."
                 echo
                 echo -n "Do you want to change the password for user '$USER' to 'apple2' now? "
@@ -259,7 +266,7 @@ if (( $doSetup )); then
                 echo                
                 echo "You can network boot GS/OS. On a ROM 01 IIgs, set slot 1 or 2, and slot 7,"
                 echo 'to AppleTalk, and Startup Slot to 7 or "Scan". On a ROM 3 IIgs, set'
-                echo "slot 1 or 2, and startup slot, to AppleTalk."
+                echo "slot 1 or 2, and Startup Slot, to AppleTalk."
             fi
             if [[ -f /srv/A2SERVER/A2FILES/BASIC.System ]]; then
                 echo
@@ -338,8 +345,5 @@ fi
 
 unset a2server_update 2> /dev/null
 unset doSetup 2> /dev/null
-rm /tmp/a2server-autoAnswerYes 2> /dev/null
-rm /tmp/a2server-packageReposUpdated 2> /dev/null
-rm /tmp/a2server-setupNetBoot 2> /dev/null
-rm /tmp/a2server-setupWindowsSharing 2> /dev/null
+rm /tmp/a2server-* 2> /dev/null
 rm setup &> /dev/null

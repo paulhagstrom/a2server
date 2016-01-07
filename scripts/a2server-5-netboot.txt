@@ -36,6 +36,22 @@ adtproDir=$commDir/ADTPro
 gsosURL="http://download.info.apple.com/Apple_Support_Area/Apple_Software_Updates/English-North_American/Apple_II/Apple_IIGS_System_6.0.1/"
 gsosBackupURL="http://archive.org/download/download.info.apple.com.2012.11/download.info.apple.com.2012.11.zip/download.info.apple.com%2FApple_Support_Area%2FApple_Software_Updates%2FEnglish-North_American%2FApple_II%2FApple_IIGS_System_6.0.1%2F"
 
+cpAD () {
+    # copy a file with its AppleDouble component in ./.AppleDouble
+    # arg1 = source path, # arg2 = destination directory (not filename)
+    afpsync=
+    if [[ $1 == "-s" ]]; then
+        afpsync=1
+        shift
+    fi
+    arg1="$1"
+    [[ "$arg1" == *"/"* ]] || arg1="./$arg1"
+    cp -p "$arg1" "$2"
+    mkdir -p "$2"/.AppleDouble
+    cp -p "${arg1%/*}"/.AppleDouble/"${arg1##*/}" "$2"/.AppleDouble
+    [[ $afpsync ]] && afpsync -v > /dev/null
+}
+
 updateP8YearTables () {            
     # Geoff Body and Andrew Roughan helped Joseph Carter with this one
     # Update ProDOS 8 year table (and spalsh date because may as well)
@@ -280,7 +296,7 @@ if [[ ! $autoAnswerYes || -f /tmp/a2server-setupNetBoot ]]; then
                             wget -qO $outfile "${binaryURL}external/appleii/gsos603/$diskname.po"
                         fi
                     fi
-                    cppo -s -ad $outfile $netInstallDir 2> /dev/null
+                    cppo -s -ad $outfile $netInstallDir
                 done
                 rm *.sea* &> /dev/null
                 sed -i "s/\([^\\]\r:\)/\1A2FILES:GSOS.Installer:Net.Install:/g" $netInstallDir/Install/Scripts/*
@@ -432,16 +448,22 @@ if [[ ! $autoAnswerYes || -f /tmp/a2server-setupNetBoot ]]; then
                 echo " is already installed."
             else
                 echo
-                cd /tmp/netboot
+                mkdir -p /tmp/netboot/mountit
+                cd /tmp/netboot/mountit
                 if [[ $useExternalURL ]]; then
                     wget -q -O MOUNTIT.SHK http://www.brutaldeluxe.fr/products/apple2gs/MOUNTIT.SHK
+                    cppo -s -ad MOUNTIT.SHK System:System.Setup:MountIt . &> /dev/null
+                    cppo -s -ad MOUNTIT.SHK ReadMe . &> /dev/null
                 fi
-                if [[ $? -ne 0 || ! -f MOUNTIT.SHK ]]; then
+                if [[ ! -f ReadMe ]]; then
                     wget -qO MOUNTIT.SHK ${binaryURL}external/appleii/MOUNTIT.SHK
+                    cppo -s -ad MOUNTIT.SHK System:System.Setup:MountIt . &> /dev/null
+                    cppo -s -ad MOUNTIT.SHK ReadMe . &> /dev/null
                 fi
-                cp -p MOUNTIT.SHK $imageToolsDir/MOUNTIT.SHK
+                cpAD ./MountIt $gsosDir/System/System.Setup
+                mkdir -p $gsosDir/GSOS.Installer/Image.Tools/MountIt
+                cpAD ./ReadMe $gsosDir/GSOS.Installer/Image.Tools/MountIt
                 afpsync -v $gsosDir > /dev/null
-                afptype -p SHK -q $imageToolsDir/MOUNTIT.SHK
             fi
         fi
 
@@ -472,7 +494,7 @@ if [[ ! $autoAnswerYes || -f /tmp/a2server-setupNetBoot ]]; then
                     wget -qO shrinkit.sdk ${binaryURL}external/appleii/shrinkit.sdk
                     nulib2 -x -s shrinkit.sdk &> /dev/null
                 fi
-                cppo -s -ad SHRINKIT /SHRINKIT/SHRINKIT $diskToolsP8Dir 2> /dev/null
+                cppo -s -ad SHRINKIT /SHRINKIT/SHRINKIT $diskToolsP8Dir &> /dev/null
                 afpsync -v $sharepath > /dev/null
             fi
         
@@ -515,17 +537,17 @@ if [[ ! $autoAnswerYes || -f /tmp/a2server-setupNetBoot ]]; then
                 fi
                 truncate -s 819284 'Apple II System Disk 3.2.sea'
                 dd if='Apple II System Disk 3.2.sea' of=A2SYSDISK32.HDV bs=84 skip=1 2> /dev/null
-                cppo -s -ad A2SYSDISK32.HDV /UTILITIES/SYSUTIL.SYSTEM $diskToolsP8Dir/SYSUTIL 2> /dev/null
-                cppo -s -ad A2SYSDISK32.HDV /UTILITIES/UTIL.0 $diskToolsP8Dir 2> /dev/null
-                cppo -s -ad A2SYSDISK32.HDV /UTILITIES/UTIL.1 $diskToolsP8Dir 2> /dev/null
-                cppo -s -ad A2SYSDISK32.HDV /UTILITIES/UTIL.2 $diskToolsP8Dir 2> /dev/null
+                cppo -s -ad A2SYSDISK32.HDV /UTILITIES/SYSUTIL.SYSTEM $diskToolsP8Dir/SYSUTIL &> /dev/null
+                cppo -s -ad A2SYSDISK32.HDV /UTILITIES/UTIL.0 $diskToolsP8Dir &> /dev/null
+                cppo -s -ad A2SYSDISK32.HDV /UTILITIES/UTIL.1 $diskToolsP8Dir &> /dev/null
+                cppo -s -ad A2SYSDISK32.HDV /UTILITIES/UTIL.2 $diskToolsP8Dir &> /dev/null
                 afpsync -v $sharepath > /dev/null
             fi
     
         fi
 
         if [[ ! $autoAnswerYes ]]; then
-            [[ -f "$gsosDir/SYSTEM/START.GS.OS" ]] && gsosInstalled="GS/OS and " || gsosInstalled=
+            [[ -f "$gsosDir/System/Start.GS.OS" ]] && gsosInstalled="GS/OS and " || gsosInstalled=
             echo
             echo "Do you want to download communications software for"
             echo -n "$gsosInstalled""ProDOS 8? "
@@ -537,41 +559,29 @@ if [[ ! $autoAnswerYes || -f /tmp/a2server-setupNetBoot ]]; then
 
             mkdir -p $commDir
 
-            echo -n "Spectrum"
-            # get Spectrum
-            if [[ -f $spectrumDir/SPECTRUM.HDV || -f $spectrumDir/Spectrum ]]; then
-                echo " is already installed."
-            else
-                mkdir -p $spectrumDir
-                echo
-                mkdir -p /tmp/netboot/spectrum
-                cd /tmp/netboot/spectrum
-                if [[ ! -f $gsosDir/SYSTEM/START.GS.OS ]]; then
-                #if true; then
-                    # provide disk images for MountIt if no GS/OS present
-                    for filename in spectrum.2mg spectrum_extras.2mg spectrum_sounds.2mg spectrum_manuals.2mg; do
-                        if [[ $useExternalURL ]]; then
-                            wget -qO $filename http://www.speccie.co.uk/speccie/software/$filename
-                        fi
-                        if [[ $? -ne 0 || ! -f $filename ]]; then
-                            wget -qO $filename ${binaryURL}external/appleii/spectrum/$filename
-                        fi
-                        dd bs=64 skip=1 if=$filename of=$spectrumDir/${filename,,}.HDV 2> /dev/null
-                    done
-                    echo -n "The Spectrum installer disk image files can be converted to floppy disks with Asimov or DSK2FILE, or mounted directly with MountIt. If using MountIt, mount bouth SPECTRUM.HDV and EXTRAS.HDV before running the installer." > $spectrumDir/SPECTRUM.README
-                    afpsync -v $gsosDir > /dev/null
-                    afptype -p TXT -q $spectrumDir/SPECTRUM.README
+            if [[ $gsosInstalled ]]; then
+                echo -n "Spectrum"
+                # get Spectrum
+                if [[ -f $spectrumDir/Spectrum ]]; then
+                    echo " is already installed."
                 else
+                    echo
+                    mkdir -p $spectrumDir
+                    # remove images that might have been installed by 1.2.5
+                    cd $spectrumDir
+                    rm SPECTRUM.HDV MANUALS.HDV SOUNDS.HDV EXTRAS.HDV &> /dev/null
                     # install Spectrum into GS/OS
+                    mkdir -p /tmp/netboot/spectrum
+                    cd /tmp/netboot/spectrum
                     if [[ $useExternalURL ]]; then
                         wget -qO spectrum_gold_2mg.zip http://www.speccie.co.uk/speccie/software/spectrum_gold_2mg.zip
                         unzip -p spectrum_gold_2mg.zip 2> /dev/null | dd bs=64 skip=1 of=Spectrum.Gold.HDV 2> /dev/null
                     fi
-                    if [[ ! -f Spectrum.Gold.2mg ]]; then
-                        wget -qO spectrum_gold_2mg.zip ${binaryURL}external/appleii/spectrum/spectrum_gold_2mg.zip
+                    if [[ ! -f Spectrum.Gold.HDV || $(wc -c < Spectrum.Gold.HDV) -eq 0 ]]; then
+                        wget -qO spectrum_gold_2mg.zip ${binaryURL}external/appleii/spectrum_gold_2mg.zip
                         unzip -p spectrum_gold_2mg.zip 2> /dev/null | dd bs=64 skip=1 of=Spectrum.Gold.HDV 2> /dev/null
                     fi
-                    cppo -s -ad Spectrum.Gold.HDV .
+                    cppo -s -ad Spectrum.Gold.HDV . &> /dev/null
                     userFolder=$(tr [:lower:] [:upper:] <<< $USER)
                     for thisFolder in \
                       Installer/Extras/CDEvs^System/CDevs \
@@ -591,9 +601,69 @@ if [[ ! $autoAnswerYes || -f /tmp/a2server-setupNetBoot ]]; then
                         mkdir -p $gsosDir/"${thisFolder##*^}"/.AppleDouble
                         cp -R Spectrum.Gold/${thisFolder%%^*}/.AppleDouble/* $gsosDir/"${thisFolder##*^}"/.AppleDouble
                     done
-                    mv Spectrum.Gold/Installer/SoundPatch Spectrum.Gold/Spectrum.2.5.4/Spectrum $spectrumDir
-                    mkdir -p $spectrumDir/.AppleDouble
-                    mv Spectrum.Gold/Installer/.AppleDouble/SoundPatch Spectrum.Gold/Spectrum.2.5.4/.AppleDouble/Spectrum $spectrumDir/.AppleDouble
+                    cpAD Spectrum.Gold/Installer/SoundPatch $spectrumDir
+                    cpAD Spectrum.Gold/Spectrum.2.5.4/Spectrum $spectrumDir
+                    afpsync -v $gsosDir > /dev/null
+                fi
+
+                echo -n "Marinetti 3.0b8"
+                if [[ -f $gsosDir/System/CDevs/TCPIP ]]; then
+                    echo " is already installed."
+                else
+                    echo
+                    mkdir -p /tmp/netboot/marinetti
+                    cd /tmp/netboot/marinetti
+
+                    # Marinetti 3.0b1
+                    wget -qO MarinettiB1.SHK ${binaryURL}appleii/MarinettiB1.SHK
+                    cppo -ad -s -n MarinettiB1.SHK $gsosDir > /dev/null
+
+                    # TCP/IP update (3.0b8)
+                    if [[ $useExternalURL ]]; then
+                        wget -qO Marinetti3.0b8.po http://www.a2retrosystems.com/downloads/Marinetti3.0b8.po
+                    fi
+                    if [[ $? != 0 || ! -f Marinetti3.0b8.po || $(wc -c < Marinetti3.0b8.po) != "819200" ]]; then
+                        wget -qO Marinetti3.0b8.po ${binaryURL}external/appleii/Marinetti3.0b8.po
+                    fi
+                    cppo -ad Marinetti3.0b8.po /MARINETTI3.0B8/TCPIP $gsosDir/System/System.Setup > /dev/null
+                    cppo -ad Marinetti3.0b8.po /MARINETTI3.0B8/CHANGELOG.3.0B8 $commDir/Marinetti > /dev/null
+
+                    # PPP Scripted Link Layer update (1.3d4)
+                    if [[ $useExternalURL ]]; then
+                        wget -qO PPPX.1.3d4.SHK http://www.apple2.org/marinetti/PPPX.1.3d4.SHK
+                    fi
+                    if [[ $? != 0 || ! -f PPPX.1.3d4.SHK || $(wc -c < PPPX.1.3d4.SHK) != "22068" ]]; then
+                        wget -qO PPPX.1.3d4.SHK ${binaryURL}external/appleii/PPPX.1.3d4.SHK
+                    fi
+                    cppo -ad -s PPPX.1.3d4.SHK . &> /dev/null
+                    cd PPPX.1.3d4
+                    cpAD PPP.scripted $gsosDir/System/TCPIP
+                    cpAD PPP.Script.DOC $commDir/Marinetti/Documentation
+                    mkdir -p $commDir/Marinetti/PPP.scripted
+                    cpAD Connect.Script $commDir/Marinetti/PPP.scripted
+                    cpAD ChangeLog $commDir/Marinetti/PPP.scripted
+
+                    # Uthernet Link Layer
+                    if [[ $useExternalURL ]]; then
+                        wget -qO uthernetll.bxy http://www.speccie.co.uk/speccie/software/uthernetll.bxy
+                    fi
+                    if [[ $? != 0 || ! -f uthernetll.bxy || $(wc -c < uthernetll.bxy) -eq 0 ]]; then
+                        wget -qO uthernetll.bxy ${binaryURL}external/appleii/uthernetll.bxy
+                    fi
+                    cppo -ad -s -n uthernetll.bxy $gsosDir/System/TCPIP > /dev/null
+
+                    # Uthernet II Link Layer
+                    if [[ $useExternalURL ]]; then
+                        wget -qO uthernet2ll.bxy http://www.speccie.co.uk/speccie/software/uthernet2ll.bxy
+                    fi
+                    if [[ $? != 0 || ! -f uthernet2ll.bxy || $(wc -c < uthernet2ll.bxy) -eq 0 ]]; then
+                        wget -qO uthernet2ll.bxy ${binaryURL}external/appleii/uthernet2ll.bxy
+                    fi
+                    cppo -ad -s -n uthernet2ll.bxy $gsosDir/System/TCPIP > /dev/null
+
+                    # MacIP Link Layer settings for A2SERVER
+                    wget -qO- ${binaryURL}macip-prefs.tgz | tar Pxz
+
                     afpsync -v $gsosDir > /dev/null
                 fi
             fi
@@ -603,14 +673,14 @@ if [[ ! $autoAnswerYes || -f /tmp/a2server-setupNetBoot ]]; then
             if [[ -f $protermDir/PROTERM ]]; then
                 echo " are already installed."
             else
+                echo
                 mkdir -p $protermDir
                 mkdir -p $protermDir/.AppleDouble
                 mkdir -p $zlinkDir
                 mkdir -p $zlinkDir/.AppleDouble
-                echo
                 cd /tmp/netboot
-                wget -qO A2CLOUD.HDV "${binaryURL}A2CLOUD.HDV"
-                cppo -ad A2CLOUD.HDV . > /dev/null
+                wget -qO A2CLOUD.HDV "${binaryURL}appleii/A2CLOUD.HDV"
+                cppo -ad A2CLOUD.HDV . &> /dev/null
                 cd A2CLOUD
                 mv *PT3* *PROTERM* $protermDir
                 mv Z.LINK $zlinkDir
@@ -660,7 +730,7 @@ if [[ ! $autoAnswerYes || -f /tmp/a2server-setupNetBoot ]]; then
     if [[ $autoAnswerYes || ${REPLY:0:1} == "Y" || ${REPLY:0:1} == "y" ]]; then
         # Farallon bridge patch for GS/OS courtesy of Geoff Body
         echo "A2SERVER: Downloading Farallon bridge patch..."
-        wget -O /tmp/FARALLON.PO "${binaryURL}FARALLON.B1.PO" &> /dev/null
+        wget -qO /tmp/FARALLON.PO "${binaryURL}appleii/FARALLON.B1.PO" &> /dev/null
         if [[ -d $gsosDir/SYSTEM/SYSTEM.SETUP ]]; then
             cppo -s -ad /tmp/FARALLON.PO /ATALKPATCH/ATALKIRQ $gsosDir/SYSTEM/SYSTEM.SETUP &> /dev/null
             echo
